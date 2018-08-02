@@ -1,0 +1,48 @@
+version: 2
+
+jobs:
+  image:
+    docker:
+      - image: docker:18.06
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run: docker build
+               -t ${DOCKER_LOGIN}/crane:latest
+               .docker
+      - run: > 
+          [ ${CIRCLE_TAG} ] && docker login -u ${DOCKER_LOGIN} -p ${DOCKER_PASSWORD} || true
+      - run: >
+          [ ${CIRCLE_TAG} ] && docker tag ${DOCKER_LOGIN}/crane:latest ${DOCKER_LOGIN}/crane:${CIRCLE_TAG} || true
+      - run: > 
+          [ ${CIRCLE_TAG} ] && docker push ${DOCKER_LOGIN}/crane:latest ${DOCKER_LOGIN}/crane:${CIRCLE_TAG} || true
+
+  binary:
+    docker:
+      - image: golang:1.10-alpine
+    working_directory: /go/src/github.com/elemir/crane
+    steps:
+      - checkout
+      - run: apk add git musl-dev gcc
+      - run: go get -u github.com/golang/dep/cmd/dep
+      - run: go get -u github.com/tcnksm/ghr
+      - run: dep ensure -v
+      - run: go build --ldflags "-X main.DefaultRepo=$DOCKER_LOGIN -X main.DefaultTag=${CIRCLE_TAG:-latest} -s -w -linkmode external -extldflags '-static'" -o /tmp/crane
+      - run: > 
+          [ ${CIRCLE_TAG} ] && ghr ${CIRCLE_TAG} /tmp/crane || true
+      - store_artifacts:
+          path: /tmp/crane
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - image:
+          filters:
+            tags:
+              only: /^v.*/
+      - binary:
+          filters:
+            tags:
+              only: /^v.*/
+
