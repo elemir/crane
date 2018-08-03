@@ -15,7 +15,9 @@ jobs:
       - run: >
           [ ${CIRCLE_TAG} ] && docker tag ${DOCKER_LOGIN}/crane:latest ${DOCKER_LOGIN}/crane:${CIRCLE_TAG} || true
       - run: > 
-          [ ${CIRCLE_TAG} ] && docker push ${DOCKER_LOGIN}/crane:latest ${DOCKER_LOGIN}/crane:${CIRCLE_TAG} || true
+          [ ${CIRCLE_TAG} ] && docker push ${DOCKER_LOGIN}/crane:latest || true
+      - run: >
+          [ ${CIRCLE_TAG} ] && docker push ${DOCKER_LOGIN}/crane:${CIRCLE_TAG} || true
 
   binary:
     docker:
