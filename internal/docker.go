@@ -18,18 +18,20 @@ type containerConfig struct {
 }
 
 type containerInfo struct {
-	id string
-	cmd []string
-	image string
+	id     string
+	cmd    []string
+	image  string
 	mounts []gdc.HostMount
+	merged string
+	state  gdc.State
 }
 
 func PrepareDebugImage(client *gdc.Client, image string, pullImage bool) (*gdc.Image, error) {
 	if client == nil {
-        return nil, fmt.Errorf("Empty client was passed to fun")
+		return nil, fmt.Errorf("Empty client was passed to fun")
 	}
 
-	if (pullImage) {
+	if pullImage {
 		pullDebugImage(client, image)
 
 		img, err := client.InspectImage(image)
@@ -46,9 +48,9 @@ func PrepareDebugImage(client *gdc.Client, image string, pullImage bool) (*gdc.I
 	return img, err
 }
 
-func RunDebugContainer(client *gdc.Client, image *gdc.Image, id string, cmd []string) error {
+func RunDebugContainer(client *gdc.Client, image *gdc.Image, skipNs bool, id string, cmd []string) error {
 	if client == nil || image == nil {
-        return fmt.Errorf("Empty client or image was passed to fun")
+		return fmt.Errorf("Empty client or image was passed to fun")
 	}
 	// inspecting old container
 	contInfo, err := getDebugContainerInfo(client, image, id, cmd)
@@ -56,7 +58,12 @@ func RunDebugContainer(client *gdc.Client, image *gdc.Image, id string, cmd []st
 		return err
 	}
 
-	config := prepareDebugContainerConfig(*contInfo)
+	if !contInfo.state.Running {
+		skipNs = true
+		fmt.Printf("WARNING: Cannot use container namespaces because its status is %s\n", contInfo.state.Status)
+	}
+
+	config := prepareDebugContainerConfig(*contInfo, skipNs)
 
 	// run debug container
 	container, err := client.CreateContainer(gdc.CreateContainerOptions{
@@ -70,13 +77,21 @@ func RunDebugContainer(client *gdc.Client, image *gdc.Image, id string, cmd []st
 
 	defer func() {
 		// force remove debug container
-		err = client.RemoveContainer(gdc.RemoveContainerOptions{
+		errRC := client.RemoveContainer(gdc.RemoveContainerOptions{
 			ID:            container.ID,
 			RemoveVolumes: true,
 			Force:         true,
 		})
-		if err != nil {
-			log.Fatalf("Cannot force remove container '%s': %s", container.Name, err)
+		errUM := UnmountOverlay(contInfo.merged)
+
+		if errRC != nil {
+			log.Printf("Cannot force remove container '%s': %s", container.Name, err)
+		}
+		if errUM != nil {
+			log.Printf("Cannot unmount merged volume '%s': %s", contInfo.merged, err)
+		}
+		if errRC != nil || errUM != nil {
+			os.Exit(1)
 		}
 	}()
 
@@ -90,34 +105,34 @@ func RunDebugContainer(client *gdc.Client, image *gdc.Image, id string, cmd []st
 }
 
 func getAuthConfig(registry string) gdc.AuthConfiguration {
-    authConfigurations, err := gdc.NewAuthConfigurationsFromDockerCfg()
-    if err != nil {
-        return gdc.AuthConfiguration{}
-    }
+	authConfigurations, err := gdc.NewAuthConfigurationsFromDockerCfg()
+	if err != nil {
+		return gdc.AuthConfiguration{}
+	}
 
-    authConfiguration, ok := authConfigurations.Configs[registry]
-    if !ok {
-        return gdc.AuthConfiguration{}
-    }
+	authConfiguration, ok := authConfigurations.Configs[registry]
+	if !ok {
+		return gdc.AuthConfiguration{}
+	}
 
-    return authConfiguration
+	return authConfiguration
 }
 
-func prepareMounts(vol string, mounts []gdc.Mount) []gdc.HostMount {
+func prepareMounts(merged string, mounts []gdc.Mount) []gdc.HostMount {
 	hostMounts := make([]gdc.HostMount, len(mounts)+1)
 
 	hostMounts[0] = gdc.HostMount{
-       Target: "/cont",
-       Source: vol,
-       Type:   "bind",
+		Target: "/cont",
+		Source: merged,
+		Type:   "bind",
 	}
 
 	for i, mount := range mounts {
 		hostMounts[i+1] = gdc.HostMount{
-            ReadOnly: !mount.RW,
-			Type: "bind",
-			Source: mount.Source,
-			Target: fmt.Sprintf("/cont%s", mount.Destination),
+			ReadOnly: !mount.RW,
+			Type:     "bind",
+			Source:   mount.Source,
+			Target:   fmt.Sprintf("/cont%s", mount.Destination),
 		}
 	}
 
@@ -134,17 +149,35 @@ func getDebugContainerInfo(client *gdc.Client, image *gdc.Image, id string, cmd 
 		return nil, fmt.Errorf("This tool is useful only with overlay2 storage driver containers")
 	}
 
-    hostMounts := prepareMounts(baseContainer.GraphDriver.Data["MergedDir"], baseContainer.Mounts)
+	merged, err := MountOverlay(
+		baseContainer.GraphDriver.Data["LowerDir"],
+		baseContainer.GraphDriver.Data["UpperDir"],
+		baseContainer.GraphDriver.Data["WorkDir"],
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("Cannot prepare merged dir: %s", err)
+	}
+
+	hostMounts := prepareMounts(merged, baseContainer.Mounts)
 
 	return &containerInfo{
-		id: id,
-		image: image.ID,
-		cmd: cmd,
+		id:     id,
+		image:  image.ID,
+		cmd:    cmd,
 		mounts: hostMounts,
+		merged: merged,
+		state:  baseContainer.State,
 	}, nil
 }
 
-func prepareDebugContainerConfig(contInfo containerInfo) containerConfig {
+func prepareDebugContainerConfig(contInfo containerInfo, skipNs bool) containerConfig {
+	mode := fmt.Sprintf("container:%s", contInfo.id)
+
+	if skipNs {
+		mode = ""
+	}
+
 	return containerConfig{
 		config: gdc.Config{
 			Image:        contInfo.image,
@@ -158,22 +191,22 @@ func prepareDebugContainerConfig(contInfo containerInfo) containerConfig {
 		},
 		hostConfig: gdc.HostConfig{
 			CapAdd:      []string{"sys_ptrace", "sys_admin"},
-			PidMode:     fmt.Sprintf("container:%s", contInfo.id),
-			NetworkMode: fmt.Sprintf("container:%s", contInfo.id),
-			IpcMode:     fmt.Sprintf("container:%s", contInfo.id),
+			PidMode:     mode,
+			NetworkMode: mode,
+			IpcMode:     mode,
 			Mounts:      contInfo.mounts,
 		},
 	}
 }
 
 func pullDebugImage(client *gdc.Client, image string) error {
-    named, err := reference.ParseNormalizedNamed(image)
-    if err != nil {
-        return fmt.Errorf("Cannot parse image name '%s': %s", image, err)
+	named, err := reference.ParseNormalizedNamed(image)
+	if err != nil {
+		return fmt.Errorf("Cannot parse image name '%s': %s", image, err)
 	}
 
-	err = client.PullImage(gdc.PullImageOptions {
-		Repository: reference.TagNameOnly(named).String(),
+	err = client.PullImage(gdc.PullImageOptions{
+		Repository:   reference.TagNameOnly(named).String(),
 		OutputStream: os.Stderr,
 	}, getAuthConfig(reference.Domain(named)))
 
@@ -183,5 +216,3 @@ func pullDebugImage(client *gdc.Client, image string) error {
 
 	return nil
 }
-
-

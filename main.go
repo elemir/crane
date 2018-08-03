@@ -1,8 +1,8 @@
 package main
 
 import (
-	"log"
 	"fmt"
+	"log"
 
 	"github.com/elemir/rainforest"
 	"github.com/spf13/cobra"
@@ -15,6 +15,7 @@ import (
 var DefaultRepo = "elemir"
 var DefaultImage = "crane"
 var DefaultTag = "latest"
+var skipNs bool
 var pull bool
 var image string
 
@@ -31,7 +32,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("Cannot prepare debug image: %s", err)
 		}
-		err = internal.RunDebugContainer(client, img, args[0], args[1:])
+		err = internal.RunDebugContainer(client, img, skipNs, args[0], args[1:])
 		if err != nil {
 			log.Fatalf("Problems with debug container: %s", err)
 		}
@@ -40,6 +41,7 @@ var rootCmd = &cobra.Command{
 
 func main() {
 	rootCmd.PersistentFlags().StringVar(&image, "image", fmt.Sprintf("%s/%s:%s", DefaultRepo, DefaultImage, DefaultTag), "Image with debugging tools")
+	rootCmd.PersistentFlags().BoolVar(&skipNs, "skip-ns", false, "Skip namespace separation")
 	rootCmd.PersistentFlags().BoolVar(&pull, "pull", false, "Always attempt to pull a newer version of the image")
 	rootCmd.Flags().SetInterspersed(false)
 	rainforest.BindPFlag("crane_image", rootCmd.PersistentFlags().Lookup("image"))
