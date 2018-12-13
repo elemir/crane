@@ -3,7 +3,7 @@ version: 2
 jobs:
   image:
     docker:
-      - image: docker:18.06
+      - image: circleci/golang:1.10.4
     steps:
       - checkout
       - setup_remote_docker
@@ -21,11 +21,10 @@ jobs:
 
   binary:
     docker:
-      - image: golang:1.10-alpine
+      - image: circleci/golang:1.10.4
     working_directory: /go/src/github.com/elemir/crane
     steps:
       - checkout
-      - run: apk add git musl-dev gcc
       - run: go get -u github.com/golang/dep/cmd/dep
       - run: go get -u github.com/tcnksm/ghr
       - run: dep ensure -v
