@@ -98,7 +98,7 @@ func RunDebugContainer(client *gdc.Client, image *gdc.Image, skipNs bool, id str
 	// start and attach to container
 	err = gdp.Start(client, container, nil)
 	if err != nil {
-		return fmt.Errorf("Container '%s' has failed to start: %s", container.Name, err)
+		return fmt.Errorf("Starting container '%s' failed: %s", container.Name, err)
 	}
 
 	return nil
