@@ -28,7 +28,7 @@ type containerInfo struct {
 
 func PrepareDebugImage(client *gdc.Client, image string, pullImage bool) (*gdc.Image, error) {
 	if client == nil {
-		return nil, fmt.Errorf("Empty client was passed to fun")
+		return nil, fmt.Errorf("Empty client was passed to function")
 	}
 
 	if pullImage {
@@ -50,7 +50,7 @@ func PrepareDebugImage(client *gdc.Client, image string, pullImage bool) (*gdc.I
 
 func RunDebugContainer(client *gdc.Client, image *gdc.Image, skipNs bool, id string, cmd []string) error {
 	if client == nil || image == nil {
-		return fmt.Errorf("Empty client or image was passed to fun")
+		return fmt.Errorf("Empty client or image was passed to function")
 	}
 	// inspecting old container
 	contInfo, err := getDebugContainerInfo(client, image, id, cmd)
@@ -98,7 +98,7 @@ func RunDebugContainer(client *gdc.Client, image *gdc.Image, skipNs bool, id str
 	// start and attach to container
 	err = gdp.Start(client, container, nil)
 	if err != nil {
-		return fmt.Errorf("Starting container '%s' was failed: %s", container.Name, err)
+		return fmt.Errorf("Container '%s' has failed to start: %s", container.Name, err)
 	}
 
 	return nil
@@ -146,7 +146,7 @@ func getDebugContainerInfo(client *gdc.Client, image *gdc.Image, id string, cmd 
 		return nil, fmt.Errorf("Cannot inspect container '%s': %s", id, err)
 	}
 	if baseContainer.GraphDriver == nil || baseContainer.GraphDriver.Name != "overlay2" {
-		return nil, fmt.Errorf("This tool is useful only with overlay2 storage driver containers")
+		return nil, fmt.Errorf("This tool can only be used with overlay2 storage driver containers")
 	}
 
 	merged, err := MountOverlay(
