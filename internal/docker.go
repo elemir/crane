@@ -37,7 +37,6 @@ func PrepareDebugImage(client *gdc.Client, image string, pullImage bool) (*gdc.I
 		img, err := client.InspectImage(image)
 		return img, err
 	}
-
 	img, err := client.InspectImage(image)
 
 	if err != nil || img == nil {
