@@ -3,7 +3,7 @@ version: 2
 jobs:
   image:
     docker:
-      - image: circleci/golang:1.10.4
+      - image: circleci/golang:1.11.5
     steps:
       - checkout
       - setup_remote_docker
@@ -21,13 +21,9 @@ jobs:
 
   binary:
     docker:
-      - image: circleci/golang:1.10.4
-    working_directory: /go/src/github.com/elemir/crane
+      - image: circleci/golang:1.11.5
     steps:
       - checkout
-      - run: go get -u github.com/golang/dep/cmd/dep
-      - run: go get -u github.com/tcnksm/ghr
-      - run: dep ensure -v
       - run: go build --ldflags "-X main.DefaultRepo=$DOCKER_LOGIN -X main.DefaultTag=${CIRCLE_TAG:-latest} -s -w -linkmode external -extldflags '-static'" -o /tmp/crane
       - run: > 
           [ ${CIRCLE_TAG} ] && ghr ${CIRCLE_TAG} /tmp/crane || true
