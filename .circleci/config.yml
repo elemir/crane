@@ -24,7 +24,9 @@ jobs:
       - image: circleci/golang:1.11.5
     steps:
       - checkout
-      - run: go build --ldflags "-X main.DefaultRepo=$DOCKER_LOGIN -X main.DefaultTag=${CIRCLE_TAG:-latest} -s -w -linkmode external -extldflags '-static'" -o /tmp/crane
+      - run: sudo apt-get install musl-tools 
+      - run: go get github.com/tcnksm/ghr
+      - run: CC=musl-gcc go build --ldflags "-X main.DefaultRepo=$DOCKER_LOGIN -X main.DefaultTag=${CIRCLE_TAG:-latest} -s -w -linkmode external -extldflags '-static'" -o /tmp/crane
       - run: > 
           [ ${CIRCLE_TAG} ] && ghr ${CIRCLE_TAG} /tmp/crane || true
       - store_artifacts:
