@@ -21,7 +21,7 @@ var image string
 
 var rootCmd = &cobra.Command{
 	Use:   "crane CONTAINER [COMMAND] [ARG...]",
-	Short: "crane is a small utility for debugging docker container",
+	Short: "crane is a small utility for debugging docker containers",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		client, err := gdc.NewClientFromEnv()
