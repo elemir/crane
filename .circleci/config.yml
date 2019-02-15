@@ -22,7 +22,6 @@ jobs:
   binary:
     docker:
       - image: circleci/golang:1.11.5
-    working_directory: /go/src/github.com/elemir/crane
     steps:
       - checkout
       - run: go build --ldflags "-X main.DefaultRepo=$DOCKER_LOGIN -X main.DefaultTag=${CIRCLE_TAG:-latest} -s -w -linkmode external -extldflags '-static'" -o /tmp/crane
